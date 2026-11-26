@@ -22,6 +22,7 @@ from .catalog import Artifact, Game, Translation
 from .detect import detect
 from .engines.godot import GodotError, GodotPatcher
 from .pck import PckError, read_pack
+from .safety import processes_running
 from .steam import GameInstall, find_install
 
 LIBRARY_PREFIX = "local/"
@@ -267,6 +268,9 @@ def inspect(appid: int, path_or_url: str | Path, target: str = "",
             f"engine detectada {detection.engine!r}; a biblioteca local so aplica Godot")
     if detection.anticheat:
         raise LibraryError("anti-cheat detectado: " + ", ".join(detection.anticheat))
+    running = processes_running([install.installdir, install.path.name])
+    if running:
+        raise LibraryError("jogo em execucao: " + ", ".join(running))
     try:
         pack = GodotPatcher.resolve_pack(install.path, {})
     except GodotError as exc:

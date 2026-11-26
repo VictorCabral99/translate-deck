@@ -129,6 +129,19 @@ def test_remove_refuses_while_installed(install, artifact):
     assert library.list_entries(APPID) == []
 
 
+def test_inspect_refuses_running_game(install, artifact, monkeypatch):
+    monkeypatch.setattr("tdeck_core.library.processes_running",
+                        lambda _names: ["Fixture Game"])
+    with pytest.raises(library.LibraryError, match="execucao"):
+        library.inspect(APPID, artifact, install=install)
+
+
+def test_inspect_refuses_anticheat(install, artifact):
+    (install.path / "EasyAntiCheat").mkdir()
+    with pytest.raises(library.LibraryError, match="anti-cheat"):
+        library.inspect(APPID, artifact, install=install)
+
+
 def test_slug_format_and_po_artifact(install, tmp_path):
     artifact = tmp_path / "pt_BR.po"
     artifact.write_bytes(b'msgid "a"\nmsgstr "b"\n')
