@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tdeck-core"
+version = "0.1.0"
+description = "Nucleo do translate-deck: catalogo e aplicacao de patches de traducao"
+readme = { text = "Nucleo do translate-deck (veja o README do repositorio).", content-type = "text/plain" }
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = []
+
+[project.scripts]
+tdeck = "tdeck_core.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

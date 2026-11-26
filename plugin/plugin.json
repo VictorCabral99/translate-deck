@@ -1,0 +1,13 @@
+{
+  "name": "Translate Deck",
+  "author": "Victor Cabral",
+  "flags": [],
+  "api_version": 1,
+  "publish": {
+    "tags": ["translation", "utility"],
+    "description": "Catalogo e instalador de traducao por patch para jogos Godot, com backup e revert byte-exato.",
+    "image": "https://raw.githubusercontent.com/VictorCabral99/translate-deck/main/plugin/assets/icon.png"
+  },
+  "repo": "https://github.com/VictorCabral99/translate-deck",
+  "license": "MIT"
+}

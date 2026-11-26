@@ -1,0 +1,21 @@
+{
+  "name": "translate-deck",
+  "version": "0.1.0",
+  "description": "QAM do translate-deck",
+  "type": "module",
+  "scripts": {
+    "build": "rollup -c",
+    "watch": "rollup -c -w"
+  },
+  "devDependencies": {
+    "@decky/api": "^1.1.2",
+    "@decky/rollup": "^1.0.1",
+    "@decky/ui": "^4.8.0",
+    "@types/react": "^18.3.3",
+    "react": "^18.3.1",
+    "rollup": "^4.21.0",
+    "typescript": "^5.5.4"
+  },
+  "remote_binary_bundling": true,
+  "remote_binary": []
+}

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+plugin/dist/
+plugin/py_modules/
+out/
+*.zip
+.pytest_cache/
+.tdeck-tmp
