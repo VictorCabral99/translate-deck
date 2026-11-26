@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import importlib.util
 import logging
 import sys
@@ -84,6 +85,16 @@ def test_list_games_without_catalog_still_lists(backend, install, entry, monkeyp
     assert result["ok"]
     assert result["warning"] == "catalogo ausente"
     assert result["games"][0]["translations"][0]["local"]
+
+
+def test_steamworks_shared_is_filtered(backend, install, monkeypatch):
+    shared = dataclasses.replace(install, appid=228980, name="Steamworks Shared",
+                                 installdir="Steamworks Shared")
+    monkeypatch.setattr(backend, "find_installs", lambda: [install, shared])
+    monkeypatch.setattr(backend, "_manual_module", lambda: None)
+    monkeypatch.setattr(backend, "_load_games", lambda: [])
+    result = asyncio.run(backend.Plugin().list_games())
+    assert [game["appid"] for game in result["games"]] == [APPID]
 
 
 def test_store_edition_hides_library(backend, install, entry, monkeypatch):

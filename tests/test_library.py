@@ -129,6 +129,58 @@ def test_remove_refuses_while_installed(install, artifact):
     assert library.list_entries(APPID) == []
 
 
+def test_slug_format_and_po_artifact(install, tmp_path):
+    artifact = tmp_path / "pt_BR.po"
+    artifact.write_bytes(b'msgid "a"\nmsgstr "b"\n')
+    entry = library.add(APPID, artifact, install=install)
+    assert entry.slug == f"pt-br-{mf.sha256_file(artifact)[:8]}"
+    game, translation, paths = library.build(APPID, entry.ref)
+    assert translation.artifacts[0].type == "po"
+    assert translation.patch_kind == "godot_translation"
+    assert paths and paths[0].suffix == ".po"
+
+
+def test_replace_required_bytes_includes_backup(install, tmp_path):
+    translated = tmp_path / "Game.pck"
+    pck.create_pack(translated, {"res://locale/en.translation": TRANSLATION})
+    report = library.inspect(APPID, translated, install=install)
+    assert report["mode"] == "replace_pack"
+    pack_size = (install.path / "Game.pck").stat().st_size
+    assert report["required_bytes"] == pack_size * 2 + translated.stat().st_size
+
+
+def test_descriptor_buildid_warning(install, tmp_path):
+    descriptor = tmp_path / "traducao.json"
+    descriptor.write_text("""
+    {
+      "appid": 424242, "name": "Fixture Game",
+      "engine": {"kind": "godot"},
+      "packs": ["Game.pck"], "buildids": {"tested": ["999999"]},
+      "risk": {"anticheat": [], "online": false},
+      "translations": [{
+        "id": "remote-ptbr", "appid": 424242, "locale": "pt_BR", "version": "1.0",
+        "patch": {"kind": "godot_translation", "artifacts": [{
+          "type": "godot_translation",
+          "url": "https://example.invalid/pt.translation",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size": 12
+        }]},
+        "source": {"type": "manual", "author": "teste"},
+        "permission": {"status": "unknown"},
+        "install": {"method": "godot_pck_translations",
+                    "params": {"insert": [{"pck_path": "res://locale/en.translation"}]}},
+        "uninstall": {"method": "manifest_revert"},
+        "files_touched": ["Game.pck"],
+        "risk": {"requires_offline": true}
+      }]
+    }
+    """, encoding="utf-8")
+    report = library.inspect(APPID, descriptor, install=install)
+    assert any("buildid 123456" in warning for warning in report["warnings"])
+    pack_size = (install.path / "Game.pck").stat().st_size
+    assert report["required_bytes"] == pack_size * 2 + 12
+
+
 def test_descriptor_entry_keeps_remote_artifacts(install, tmp_path):
     descriptor = tmp_path / "traducao.json"
     descriptor.write_text("""

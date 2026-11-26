@@ -232,6 +232,23 @@ def _propose_target(pack: Path, artifact_name: str, target: str) -> tuple[str, l
     return "", candidates
 
 
+def _descriptor_hints(path: Path | None) -> tuple[list[str], int]:
+    if path is None:
+        return [], 0
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return [], 0
+    tested = [str(item) for item in ((raw.get("buildids") or {}).get("tested") or [])]
+    total = 0
+    for translation in raw.get("translations") or []:
+        for artifact in ((translation.get("patch") or {}).get("artifacts") or []):
+            size = artifact.get("size")
+            if isinstance(size, int) and size > 0:
+                total += size
+    return tested, total
+
+
 def _install_for(appid: int, install: GameInstall | None) -> GameInstall:
     if install is not None:
         return install
@@ -261,7 +278,12 @@ def inspect(appid: int, path_or_url: str | Path, target: str = "",
         warnings: list[str] = []
         if analysis.mode == "descriptor":
             destination, candidates = "", []
-            required = pack.stat().st_size * 2 + analysis.size
+            tested, artifact_bytes = _descriptor_hints(analysis.descriptor)
+            if tested and install.buildid and install.buildid not in tested:
+                warnings.append(
+                    f"buildid {install.buildid} fora dos testados ({', '.join(tested)})"
+                )
+            required = pack.stat().st_size * 2 + (artifact_bytes or analysis.size)
             warnings.append("descritor .json aplica os artefatos por URL (hash conferido no download)")
         elif analysis.mode == "replace_pack":
             try:
@@ -269,7 +291,7 @@ def inspect(appid: int, path_or_url: str | Path, target: str = "",
             except PckError as exc:
                 raise LibraryError(f"o .pck informado nao e um pack Godot valido: {exc}") from exc
             destination, candidates = "", []
-            required = pack.stat().st_size + analysis.size
+            required = pack.stat().st_size * 2 + analysis.size
             warnings.append("substitui o pack inteiro; o backup permite reverter")
         else:
             destination, candidates = _propose_target(pack, analysis.display_name, target)
