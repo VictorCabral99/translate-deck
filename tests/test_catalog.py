@@ -107,6 +107,30 @@ def test_load_and_index_are_deterministic(tmp_path: Path):
     assert digest_path.read_text(encoding="utf-8").strip() == digest
 
 
+def test_pack_replace_kind_is_valid():
+    payload = game_payload()
+    translation = payload["translations"][0]
+    translation["patch"] = {"kind": "godot_pack_replace", "artifacts": [{
+        "type": "pck", "url": "https://example.invalid/Game.pck",
+        "sha256": SHA, "size": 2048,
+    }]}
+    translation["install"] = {"method": "godot_pck_replace",
+                              "params": {"replace_pack": True}}
+    game = validate_game(payload)
+    assert game.translations[0].patch_kind == "godot_pack_replace"
+    index = build_index([game])
+    install = index["games"][0]["translations"][0]["install"]
+    assert install["params"]["replace_pack"] is True
+    assert index["games"][0]["translations"][0]["patch"]["artifacts"][0]["type"] == "pck"
+
+
+def test_unknown_install_method_rejected():
+    payload = game_payload()
+    payload["translations"][0]["install"]["method"] = "run_script"
+    with pytest.raises(CatalogError, match="install.method"):
+        validate_game(payload)
+
+
 def test_duplicate_appid_and_id(tmp_path: Path):
     catalog_dir = tmp_path / "catalog"
     (catalog_dir / "games").mkdir(parents=True)

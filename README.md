@@ -17,7 +17,7 @@ tradução do próprio usuário (biblioteca local, `local/<id>`).
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -e core/ pytest
-python -m pytest                 # 69 testes (+1 condicional ao GDRE real)
+python -m pytest                 # 71 testes (+1 condicional ao GDRE real)
 python tests/e2e/windows_e2e.py  # catálogo e biblioteca: apply -> verify -> revert byte-exato
 tdeck doctor
 ```
