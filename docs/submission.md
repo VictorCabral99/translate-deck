@@ -1,8 +1,9 @@
 # Submissão ao Decky Plugin Store
 
-Status em 2026-11-26: **não submetido**. As etapas abaixo estão na ordem em que
-precisam acontecer; as marcadas com "bloqueio" dependem de ações fora do
-repositório (publicar catálogo, Deck físico, conta GitHub).
+Status em 2026-11-26: **não submetido**. Catálogo publicado e índice fixado
+(etapas 1–2 concluídas); restam teste no Deck, repositório de release e o PR.
+As etapas abaixo estão na ordem em que precisam acontecer; as marcadas com
+"bloqueio" dependem de ações fora do repositório (Deck físico, conta GitHub).
 
 ## Requisitos verificados na wiki oficial
 

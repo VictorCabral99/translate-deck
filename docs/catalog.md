@@ -53,9 +53,13 @@ hash esperado e exige `--apply`. Na build da loja, `sources/manual.py` e
 
 ## Estado atual
 
-O catálogo está vazio. O spike do M0 validou leitura, extração e repack em
-packs reais (Godot 4.7/4.8, inclusive 30+ `.po` de tradução) e a semântica do
-GDRE (`--pck-patch`).
+O catálogo está vazio e **publicado** desde 2026-11-26 em
+`https://victorcabral99.github.io/translate-deck-catalog/` (CI valida, regenera
+`index.json` + `index.sha256` e publica Pages). O plugin fixa o digest atual
+(`INDEX_SHA256` em `plugin/main.py`); publicar catálogo novo exige atualizar o
+pin e a build. O spike do M0 validou leitura, extração e repack em packs reais
+(Godot 4.7/4.8, inclusive 30+ `.po` de tradução) e a semântica do GDRE
+(`--pck-patch`).
 
 As primeiras entradas reais (2–3 jogos Godot) seguem sem candidato: buscas no
 GameVicio e no GitHub (2026-11-26) não retornaram tradução de jogo Godot com
