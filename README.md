@@ -2,6 +2,8 @@
 
 Hub de traduções para o Steam Deck (Decky Loader). Descobre traduções de jogos
 em um catálogo curado e as aplica nos arquivos do jogo com backup e rollback.
+Na build sideload, também lista todos os jogos instalados e aceita arquivos de
+tradução do próprio usuário (biblioteca local, `local/<id>`).
 
 - `core/` — biblioteca Python + CLI `tdeck` (sem dependências externas)
 - `plugin/` — plugin Decky (backend Python + painel QAM)
@@ -15,8 +17,8 @@ em um catálogo curado e as aplica nos arquivos do jogo com backup e rollback.
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install -e core/ pytest
-python -m pytest                 # 51 testes (+1 condicional ao GDRE real)
-python tests/e2e/windows_e2e.py  # apply -> verify -> revert byte-exato
+python -m pytest                 # 63 testes (+1 condicional ao GDRE real)
+python tests/e2e/windows_e2e.py  # catálogo e biblioteca: apply -> verify -> revert byte-exato
 tdeck doctor
 ```
 
@@ -31,11 +33,21 @@ tdeck install --appid 367520 --translation hk-ptbr --apply
 tdeck uninstall --appid 367520
 ```
 
+Biblioteca local (sideload):
+
+```bash
+tdeck inspect "traducao.zip" --appid 367520
+tdeck library add "traducao.zip" --appid 367520
+tdeck library list --appid 367520
+tdeck install --appid 367520 --translation local/pt-br-1a2b3c4d --apply
+tdeck library remove 367520 local/pt-br-1a2b3c4d
+```
+
 Plugin:
 
 ```bash
 cd plugin && npm install && npm run build
-python scripts/build.py --edition store      # out/store.zip (sem fonte manual)
+python scripts/build.py --edition store      # out/store.zip (sem fonte manual/biblioteca)
 python scripts/build.py --edition sideload   # out/sideload.zip
 bash tools/deck_smoke.sh sideload            # instala e reinicia o Decky no Deck
 ```

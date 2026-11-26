@@ -71,6 +71,8 @@ class GodotPatcher:
         game_dir = install.path
         if game.engine.get("kind") != cls.kind:
             raise GodotError(f"engine do catalogo nao e godot: {game.engine.get('kind')}")
+        if translation.patch_kind == "godot_pack_replace":
+            return cls._plan_replace(install, game, translation, artifact_paths, apply)
 
         detection = detect(game_dir)
         running = safety.processes_running([install.installdir, game_dir.name])
@@ -158,6 +160,57 @@ class GodotPatcher:
             },
         )
 
+    @classmethod
+    def _plan_replace(cls, install: GameInstall, game: Game, translation: Translation,
+                      artifact_paths: list[Path] | None, apply: bool) -> InstallPlan:
+        game_dir = install.path
+        detection = detect(game_dir)
+        running = safety.processes_running([install.installdir, game_dir.name])
+        params = translation.install.get("params") or {}
+        pack = cls.resolve_pack(game_dir, params)
+        read_pack(pack)
+        if len(translation.artifacts) != 1 or translation.artifacts[0].type != "pck":
+            raise GodotError("replace_pack exige exatamente um artefato .pck")
+        artifact = translation.artifacts[0]
+
+        needed = pack.stat().st_size * 2 + artifact.size
+        pre = safety.preflight(game_dir, cls.kind, detection.engine, detection.anticheat,
+                               needed, running)
+        errors = list(pre.errors)
+        catalog_anticheat = list(game.risk.get("anticheat") or [])
+        if catalog_anticheat:
+            errors.append("catalogo marca anti-cheat: " + ", ".join(catalog_anticheat))
+        if game.risk.get("online"):
+            errors.append("jogo com componente online: aplicar traducao nao e permitido")
+        if errors:
+            raise GodotError("; ".join(errors))
+
+        source = None
+        if apply:
+            if not artifact_paths:
+                raise GodotError(f"artefato {artifact.url} nao baixado")
+            source = Path(artifact_paths[0])
+            if not source.is_file():
+                raise GodotError(f"artefato ausente: {source}")
+            try:
+                read_pack(source)
+            except PckError as exc:
+                raise GodotError(f"o artefato nao e um pack Godot valido: {exc}") from exc
+        writes = [(pack.name, source.stat().st_size if source else artifact.size)]
+
+        return InstallPlan(
+            appid=install.appid, game_name=install.name, game_dir=game_dir, engine=cls.kind,
+            target=pack.name, translation_id=translation.id, locale=translation.locale,
+            version=translation.version, backups=[pack.name], created=[],
+            writes=writes, required_bytes=needed,
+            warnings=["substitui o pack inteiro; o backup permite reverter"],
+            payload={
+                "pack": pack, "mode": "replace_pack",
+                "artifact": source, "buildid": install.buildid,
+                "tool": "tdeck-pack-replace",
+            },
+        )
+
     @staticmethod
     def _gdre_binary(params: dict) -> str:
         gdre = params.get("gdre") or {}
@@ -190,6 +243,8 @@ class GodotPatcher:
     def apply(cls, plan: InstallPlan) -> ApplyResult:
         payload = plan.payload
         pack: Path = payload["pack"]
+        if payload.get("mode") == "replace_pack":
+            return cls._apply_replace(plan)
         with safety.Lock(mf.state_dir() / "locks" / f"{plan.appid}.lock"):
             before = mf.sha256_file(pack)
             backup = mf.backup_file(plan.game_dir, pack.name, plan.appid, payload["buildid"])
@@ -231,6 +286,35 @@ class GodotPatcher:
             ))
         return ApplyResult(True, mf.STATUS_INSTALLED, "traducao instalada",
                            [f.relpath for f in files])
+
+    @classmethod
+    def _apply_replace(cls, plan: InstallPlan) -> ApplyResult:
+        payload = plan.payload
+        pack: Path = payload["pack"]
+        source: Path = payload["artifact"]
+        with safety.Lock(mf.state_dir() / "locks" / f"{plan.appid}.lock"):
+            before = mf.sha256_file(pack)
+            backup = mf.backup_file(plan.game_dir, pack.name, plan.appid, payload["buildid"])
+            tmp = pack.with_name(pack.name + ".tdeck-new")
+            try:
+                shutil.copyfile(source, tmp)
+                read_pack(tmp)
+                os.replace(tmp, pack)
+            except (PckError, OSError) as exc:
+                tmp.unlink(missing_ok=True)
+                raise GodotError(f"falha ao substituir o pack: {exc}") from exc
+            files = [mf.InstalledFile(
+                relpath=pack.name, backup=str(backup), sha256_before=before,
+                sha256_after=mf.sha256_file(pack), size=pack.stat().st_size,
+            )]
+            mf.save(mf.Manifest(
+                appid=plan.appid, translation_id=plan.translation_id, locale=plan.locale,
+                version=plan.version, engine=plan.engine, buildid=payload["buildid"],
+                installed_at=mf.now_iso(), tool=payload["tool"], files=files,
+                created_files=[],
+            ))
+        return ApplyResult(True, mf.STATUS_INSTALLED, "traducao instalada (pack substituido)",
+                           [pack.name])
 
     @staticmethod
     def uninstall(appid: int, game_dir: Path) -> ApplyResult:

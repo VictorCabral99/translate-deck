@@ -18,21 +18,28 @@ type Translation = {
   blocked: string;
   source: string;
   permission: string;
+  local?: boolean;
+  kind?: string;
+  targets?: string[];
 };
 
 type GameRow = {
   appid: number;
   name: string;
   buildid: string;
+  engine: string;
   installed_translation: string;
   translations: Translation[];
 };
 
 type Job = { id: string; message: string; done: boolean; error: string };
 
-type ManualFieldProps = { value: string; onChange: (value: string) => void };
+type LibraryProps = { games: GameRow[]; onChanged: () => void };
 
-const getGames = callable<[], { ok: boolean; error?: string; games: GameRow[] }>("list_games");
+const getGames = callable<
+  [],
+  { ok: boolean; error?: string; warning?: string; games: GameRow[] }
+>("list_games");
 const refreshCatalog = callable<[], { ok: boolean; error?: string; games?: number }>("refresh_catalog");
 const runInstall = callable<[number, string, boolean, string], { ok: boolean; job?: string; error?: string }>(
   "install",
@@ -42,6 +49,7 @@ const runVerify = callable<
   [number],
   { ok: boolean; status?: string; message?: string; error?: string }
 >("verify");
+const removeLocal = callable<[number, string], { ok: boolean; error?: string }>("library_remove");
 const getJob = callable<[string], Job>("get_job");
 const manualAvailable = callable<[], { ok: boolean; available: boolean }>("manual_source_available");
 const readLog = callable<[number], { ok: boolean; lines: string[] }>("read_log");
@@ -50,15 +58,16 @@ export function QAM() {
   const [games, setGames] = useState<GameRow[]>([]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [log, setLog] = useState<string[]>([]);
-  const [ManualField, setManualField] = useState<ComponentType<ManualFieldProps> | null>(null);
-  const [manualPath, setManualPath] = useState("");
+  const [Library, setLibrary] = useState<ComponentType<LibraryProps> | null>(null);
 
   const reload = useCallback(async () => {
     const result = await getGames();
     if (result.ok) {
       setGames(result.games);
       setError("");
+      setNotice(result.warning ?? "");
     } else {
       setError(result.error ?? "falha ao listar jogos");
     }
@@ -69,7 +78,7 @@ export function QAM() {
     manualAvailable().then(async (r) => {
       if (!r.available) return;
       const module = await import("./ManualSource");
-      setManualField(() => module.ManualField);
+      setLibrary(() => module.LibrarySection);
     });
   }, [reload]);
 
@@ -95,13 +104,22 @@ export function QAM() {
 
   const install = async (appid: number, translationId: string) => {
     setBusy("iniciando");
-    const result = await runInstall(appid, translationId, false, manualPath);
+    const result = await runInstall(appid, translationId, false, "");
     if (!result.ok || !result.job) {
       setBusy("");
       toaster.toast({ title: "Traducao", body: result.error ?? "falha ao iniciar" });
       return;
     }
     await watchJob(result.job);
+  };
+
+  const remove = async (appid: number, translationId: string) => {
+    const result = await removeLocal(appid, translationId);
+    toaster.toast({
+      title: "Biblioteca",
+      body: result.ok ? "removida da biblioteca" : result.error ?? "falhou",
+    });
+    await reload();
   };
 
   return (
@@ -111,9 +129,9 @@ export function QAM() {
           Atualizar catalogo
         </ButtonItem>
       </PanelSectionRow>
-      {ManualField && (
+      {Library && (
         <PanelSectionRow>
-          <ManualField value={manualPath} onChange={setManualPath} />
+          <Library games={games} onChanged={reload} />
         </PanelSectionRow>
       )}
       {busy && (
@@ -128,14 +146,25 @@ export function QAM() {
           <Field label={error} />
         </PanelSectionRow>
       )}
+      {notice && !error && (
+        <PanelSectionRow>
+          <Field label={notice} />
+        </PanelSectionRow>
+      )}
       {games.map((game) => (
         <PanelSectionRow key={game.appid}>
           <Focusable style={{ width: "100%" }}>
             <Field label={`${game.name}${game.installed_translation ? " (traduzido)" : ""}`}>
-              build {game.buildid}
+              {`${game.engine} | build ${game.buildid}`}
             </Field>
             {game.translations.length === 0 && (
-              <Field label="Nenhuma traducao no catalogo para este jogo." />
+              <Field
+                label={
+                  game.engine === "godot"
+                    ? "Nenhuma traducao conhecida; adicione um arquivo na secao acima."
+                    : `Engine ${game.engine}: somente Godot por enquanto.`
+                }
+              />
             )}
             {game.translations.map((translation) => (
               <div key={translation.id}>
@@ -182,6 +211,17 @@ export function QAM() {
                   >
                     Reverter
                   </ButtonItem>
+                  {translation.local && (
+                    <ButtonItem
+                      layout="below"
+                      disabled={
+                        !!busy || game.installed_translation === translation.id
+                      }
+                      onClick={() => remove(game.appid, translation.id)}
+                    >
+                      Remover
+                    </ButtonItem>
+                  )}
                 </Focusable>
               </div>
             ))}

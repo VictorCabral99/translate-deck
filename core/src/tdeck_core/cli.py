@@ -112,10 +112,17 @@ def cmd_games(args) -> int:
 
 
 def _prepare(args):
-    games, translation = _games(args)
     install = find_install(args.appid, Path(args.steam_root) if args.steam_root else None)
     if install is None:
         raise SteamError(f"appid {args.appid} nao esta instalado")
+    if not args.translation:
+        raise CatalogError("informe --translation")
+    if args.translation.startswith("local/"):
+        from . import library
+        scoped, game, translation, patcher, paths = library.load_target(
+            install, args.appid, args.translation)
+        return scoped, game, translation, patcher, paths
+    games, translation = _games(args)
     if translation is None:
         raise CatalogError("informe --translation")
     game, translation = find_translation(games, args.appid, args.translation)
@@ -127,23 +134,23 @@ def _prepare(args):
     patcher = PATCHERS.get(game.engine.get("kind", ""))
     if patcher is None:
         raise CatalogError(f"engine {game.engine.get('kind')!r} ainda nao suportada")
-    return install, game, translation, patcher
+    return install, game, translation, patcher, None
 
 
 def cmd_plan(args) -> int:
-    install, game, translation, patcher = _prepare(args)
-    plan = patcher.plan(install, game, translation, None, apply=False)
+    install, game, translation, patcher, paths = _prepare(args)
+    plan = patcher.plan(install, game, translation, paths, apply=False)
     _print(plan.describe(), args.json)
     return 0
 
 
 def cmd_install(args) -> int:
-    install, game, translation, patcher = _prepare(args)
-    artifact_paths = []
-    if args.apply:
+    install, game, translation, patcher, paths = _prepare(args)
+    artifact_paths = paths
+    if paths is None and args.apply:
         from . import download
-        for artifact in translation.artifacts:
-            artifact_paths.append(download.fetch(artifact.url, artifact.sha256))
+        artifact_paths = [download.fetch(artifact.url, artifact.sha256)
+                          for artifact in translation.artifacts]
     plan = patcher.plan(install, game, translation, artifact_paths, apply=args.apply)
     if not args.apply:
         _print(plan.describe(), args.json)
@@ -152,6 +159,33 @@ def cmd_install(args) -> int:
     result = patcher.apply(plan)
     _print({"plan": plan.describe(), "result": result.describe()}, args.json)
     return 0 if result.ok else 1
+
+
+def cmd_library_list(args) -> int:
+    from . import library
+    entries = library.list_entries(args.appid)
+    _print({"entries": [entry.to_dict() for entry in entries]}, args.json)
+    return 0
+
+
+def cmd_library_add(args) -> int:
+    from . import library
+    entry = library.add(args.appid, args.path, args.target or "")
+    _print(entry.to_dict(), args.json)
+    return 0
+
+
+def cmd_library_remove(args) -> int:
+    from . import library
+    entry = library.remove(args.appid, args.id)
+    _print({"removed": entry.to_dict()}, args.json)
+    return 0
+
+
+def cmd_inspect(args) -> int:
+    from . import library
+    _print(library.inspect(args.appid, args.path, args.target or ""), args.json)
+    return 0
 
 
 def cmd_uninstall(args) -> int:
@@ -250,6 +284,29 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--steam-root")
     add_catalog_opts(pl)
     pl.set_defaults(func=cmd_games)
+
+    p = sub.add_parser("library", help="biblioteca local de traducoes (sideload)",
+                       parents=[common])
+    lib = p.add_subparsers(dest="library_command", required=True)
+    lib_list = lib.add_parser("list", parents=[common])
+    lib_list.add_argument("--appid", type=int)
+    lib_list.set_defaults(func=cmd_library_list)
+    lib_add = lib.add_parser("add", parents=[common])
+    lib_add.add_argument("path")
+    lib_add.add_argument("--appid", type=int, required=True)
+    lib_add.add_argument("--target", help="entrada do pack (res://...) quando ambigua")
+    lib_add.set_defaults(func=cmd_library_add)
+    lib_remove = lib.add_parser("remove", parents=[common])
+    lib_remove.add_argument("appid", type=int)
+    lib_remove.add_argument("id")
+    lib_remove.set_defaults(func=cmd_library_remove)
+
+    p = sub.add_parser("inspect", help="inspeciona um arquivo de traducao sem gravar",
+                       parents=[common])
+    p.add_argument("path")
+    p.add_argument("--appid", type=int, required=True)
+    p.add_argument("--target")
+    p.set_defaults(func=cmd_inspect)
 
     for name, func, needs_target in (("plan", cmd_plan, True), ("install", cmd_install, True),
                                      ("uninstall", cmd_uninstall, False), ("verify", cmd_verify, False)):

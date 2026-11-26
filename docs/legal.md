@@ -60,5 +60,7 @@ como bloqueada e não instala.
   reversão é sempre possível enquanto o manifest existir.
 - Atualização do jogo pode quebrar o patch: o `verify` detecta (`revalidated`)
   e oferece reaplicação.
-- Build da loja não inclui fonte manual; sideload inclui, e é de
-  responsabilidade de quem instala.
+- Build da loja não inclui fonte manual nem biblioteca local; sideload inclui, e
+  é de responsabilidade de quem instala. Arquivos adicionados à biblioteca
+  (`local/<id>`) não são hospedados nem distribuídos pelo projeto: ficam apenas
+  no aparelho do usuário, com hash conferido a cada aplicação.

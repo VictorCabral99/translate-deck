@@ -11,9 +11,9 @@ from pathlib import Path
 from . import CATALOG_SCHEMA_VERSION
 
 ENGINES = {"godot", "renpy", "unreal", "unity", "rpgmaker", "gamemaker", "unknown"}
-PATCH_KINDS = {"godot_translation"}
-INSTALL_METHODS = {"godot_pck_translations"}
-ARTIFACT_TYPES = {"godot_translation", "po"}
+PATCH_KINDS = {"godot_translation", "godot_pack_replace"}
+INSTALL_METHODS = {"godot_pck_translations", "godot_pck_replace"}
+ARTIFACT_TYPES = {"godot_translation", "po", "pck"}
 PERMISSION_STATUS = {"granted", "implied", "unknown", "denied"}
 SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,63}$")

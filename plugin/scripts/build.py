@@ -42,6 +42,7 @@ def stage(edition: str) -> Path:
     if edition == "store":
         (target / "manual_wiring.py").unlink(missing_ok=True)
         (target / "py_modules" / "tdeck_core" / "sources" / "manual.py").unlink(missing_ok=True)
+        (target / "py_modules" / "tdeck_core" / "library.py").unlink(missing_ok=True)
         for chunk in (target / "dist").glob("ManualSource-*"):
             chunk.unlink()
     elif not (target / "manual_wiring.py").is_file():
@@ -69,9 +70,10 @@ def main() -> int:
     pack(staged, destination)
 
     names = zipfile.ZipFile(destination).namelist()
-    leaked = [name for name in names if "manual" in name.lower()]
+    leaked = [name for name in names
+              if "manual" in name.lower() or "library" in name.lower()]
     if args.edition == "store" and leaked:
-        print(f"erro: build da loja contem arquivo manual: {leaked}", file=sys.stderr)
+        print(f"erro: build da loja contem arquivo sideload: {leaked}", file=sys.stderr)
         return 1
     if args.edition == "sideload" and not any(
             name.startswith("dist/ManualSource-") and name.endswith(".js") for name in names):

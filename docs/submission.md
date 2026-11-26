@@ -49,7 +49,7 @@ de release separado com a build da loja na raiz.
    python plugin/scripts/build.py --edition store
    mkdir -p ../translate-deck-plugin && unzip -o out/store.zip -d ../translate-deck-plugin
    # revisar, commitar e publicar ../translate-deck-plugin
-   unzip -l out/store.zip | grep -i manual   # deve sair vazio: exit 1
+   unzip -l out/store.zip | grep -iE "manual|library"   # deve sair vazio: exit 1
    ```
 
 4. **Teste no Deck** (bloqueio: Deck físico, branches Stable + Beta).
@@ -57,10 +57,12 @@ de release separado com a build da loja na raiz.
    reverter um jogo real; `journalctl -u plugin_loader` sem traceback.
 
    Observação sobre a build da loja: o backend da fonte manual
-   (`sources/manual.py` + `manual_wiring.py`) e o chunk `dist/ManualSource-*`
-   (import dinâmico da UI) não existem no zip. O `index.js` mantém a referência
-   ao chunk, mas o import só é executado quando `manual_source_available`
-   responde `true`, o que nunca acontece na build da loja.
+   (`sources/manual.py` + `manual_wiring.py`), a biblioteca local
+   (`library.py`) e o chunk `dist/ManualSource-*` (seção sideload do QAM) não
+   existem no zip. O `index.js` mantém a referência ao chunk, mas o import só é
+   executado quando `manual_source_available` responde `true`, o que nunca
+   acontece na build da loja; os métodos `library_add`/`library_remove` apenas
+   devolvem erro nessa edição.
 
 5. **PR no decky-plugin-database**.
    Fork → `git submodule add <url do repo de release> plugins/translate-deck` com
@@ -72,7 +74,7 @@ de release separado com a build da loja na raiz.
 
 - [ ] `python -m pytest` verde (core).
 - [ ] `tdeck catalog validate` e `build_index.py --check` verdes.
-- [ ] `out/store.zip` sem `manual_wiring.py`/`sources/manual.py` (grep acima).
+- [ ] `out/store.zip` sem `manual_wiring.py`/`sources/manual.py`/`library.py` (grep acima).
 - [ ] `INDEX_SHA256` preenchido e igual ao `index.sha256` publicado.
 - [ ] `package.json` com versão nova e `plugin.json` com descrição/tags atuais.
 - [ ] Repositório de release público com `LICENSE` (MIT) na raiz.

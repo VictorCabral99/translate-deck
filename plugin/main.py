@@ -97,33 +97,22 @@ class Plugin:
     async def list_games(self):
         try:
             catalog = {game.appid: game for game in _load_games()}
+            warning = ""
         except cat.CatalogError as exc:
-            return {"ok": False, "error": str(exc), "games": []}
-        installs = await asyncio.to_thread(find_installs)
-        rows = []
-        for install in installs:
-            game = catalog.get(install.appid)
-            current = mf.load(install.appid)
-            rows.append({
-                "appid": install.appid,
-                "name": install.name,
-                "buildid": install.buildid,
-                "installed_translation": current.translation_id if current else "",
-                "translations": [
-                    {"id": t.id, "title": t.title or t.id, "locale": t.locale,
-                     "version": t.version, "installable": t.installable,
-                     "blocked": t.blocked_reason, "source": t.source.get("author", ""),
-                     "permission": t.permission.get("status", "")}
-                    for t in (game.translations if game else [])
-                ],
-            })
-        return {"ok": True, "games": rows}
+            catalog, warning = {}, str(exc)
+        installs = [item for item in await asyncio.to_thread(find_installs)
+                    if item.installdir.casefold() != "steamworks shared"]
+        rows = await asyncio.to_thread(self._rows, installs, catalog)
+        result = {"ok": True, "games": rows}
+        if warning:
+            result["warning"] = warning
+        return result
 
     async def plan(self, appid: int, translation_id: str, manual_path: str = ""):
         try:
-            install, game, translation, patcher = await asyncio.to_thread(
+            install, game, translation, patcher, paths = await asyncio.to_thread(
                 self._target, appid, translation_id, manual_path)
-            plan = await asyncio.to_thread(patcher.plan, install, game, translation, None, False)
+            plan = await asyncio.to_thread(patcher.plan, install, game, translation, paths, False)
             return {"ok": True, "plan": plan.describe()}
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": str(exc)}
@@ -133,18 +122,21 @@ class Plugin:
         if dry_run:
             return await self.plan(appid, translation_id, manual_path)
         try:
-            install, game, translation, patcher = await asyncio.to_thread(
+            install, game, translation, patcher, paths = await asyncio.to_thread(
                 self._target, appid, translation_id, manual_path)
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": str(exc)}
 
         def action(job_id: str) -> None:
-            paths = []
-            for artifact in translation.artifacts:
-                _job(job_id, f"baixando {artifact.url.rsplit('/', 1)[-1]}")
-                paths.append(download.fetch(artifact.url, artifact.sha256))
+            if paths is None:
+                paths_ready = []
+                for artifact in translation.artifacts:
+                    _job(job_id, f"baixando {artifact.url.rsplit('/', 1)[-1]}")
+                    paths_ready.append(download.fetch(artifact.url, artifact.sha256))
+            else:
+                paths_ready = paths
             _job(job_id, "aplicando patch")
-            plan = patcher.plan(install, game, translation, paths, True)
+            plan = patcher.plan(install, game, translation, paths_ready, True)
             result = patcher.apply(plan)
             _job(job_id, result.message, done=True, error="" if result.ok else result.message)
 
@@ -186,22 +178,105 @@ class Plugin:
     async def manual_source_available(self):
         return {"ok": True, "available": _manual_module() is not None}
 
+    async def inspect_translation(self, appid: int, path: str, target: str = ""):
+        module = _manual_module()
+        if module is None:
+            return {"ok": False, "error": "inspecao indisponivel nesta edicao (loja)"}
+        try:
+            report = await asyncio.to_thread(module.inspect_translation, appid, path, target)
+            return {"ok": True, "report": report}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+
+    async def library_add(self, appid: int, path: str, target: str = ""):
+        module = _manual_module()
+        if module is None:
+            return {"ok": False, "error": "biblioteca indisponivel nesta edicao (loja)"}
+        try:
+            entry = await asyncio.to_thread(module.library_add, appid, path, target)
+            _log(f"biblioteca: adicionado {entry['ref']} para {appid}")
+            return {"ok": True, "entry": entry}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+
+    async def library_remove(self, appid: int, translation_id: str):
+        module = _manual_module()
+        if module is None:
+            return {"ok": False, "error": "biblioteca indisponivel nesta edicao (loja)"}
+        try:
+            entry = await asyncio.to_thread(module.library_remove, appid, translation_id)
+            _log(f"biblioteca: removido {entry['ref']} de {appid}")
+            return {"ok": True, "entry": entry}
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": str(exc)}
+
     def _target(self, appid: int, translation_id: str, manual_path: str):
         install = find_install(appid)
         if install is None:
             raise SteamError(f"appid {appid} nao esta instalado")
+        if translation_id.startswith("local/"):
+            module = _manual_module()
+            if module is None:
+                raise RuntimeError("biblioteca local indisponivel nesta edicao (loja)")
+            return module.load_library_target(install, appid, translation_id)
         if manual_path:
             module = _manual_module()
             if module is None:
                 raise RuntimeError("fonte manual indisponivel nesta edicao (loja)")
-            return module.load_target(install, appid, translation_id, manual_path)
+            return module.load_target(install, appid, translation_id, manual_path) + (None,)
         game, translation = cat.find_translation(_load_games(), appid, translation_id)
         if not translation.installable:
             raise RuntimeError(f"traducao bloqueada: {translation.blocked_reason}")
         patcher = PATCHERS.get(game.engine.get("kind", ""))
         if patcher is None:
             raise RuntimeError(f"engine {game.engine.get('kind')!r} nao suportada")
-        return install, game, translation, patcher
+        return install, game, translation, patcher, None
+
+    @staticmethod
+    def _rows(installs, catalog) -> list[dict]:
+        from tdeck_core.detect import detect_engine
+
+        module = _manual_module()
+        rows = []
+        for install in installs:
+            game = catalog.get(install.appid)
+            current = mf.load(install.appid)
+            try:
+                engine = detect_engine(install.path)[0]
+            except OSError:
+                engine = "unknown"
+            translations = [
+                {"id": t.id, "title": t.title or t.id, "locale": t.locale,
+                 "version": t.version, "installable": t.installable,
+                 "blocked": t.blocked_reason, "source": t.source.get("author", ""),
+                 "permission": t.permission.get("status", ""), "local": False}
+                for t in (game.translations if game else [])
+            ]
+            if module is not None:
+                try:
+                    local_entries = module.library_list(install.appid)
+                except Exception:  # noqa: BLE001
+                    local_entries = []
+                for entry in local_entries:
+                    supported = engine == "godot"
+                    translations.append({
+                        "id": entry["ref"], "title": entry["title"] or entry["ref"],
+                        "locale": entry["locale"], "version": entry["version"],
+                        "installable": supported,
+                        "blocked": "" if supported else f"engine {engine} nao suportada",
+                        "source": "biblioteca local", "permission": "local",
+                        "local": True, "kind": entry["kind"],
+                        "targets": entry["targets"],
+                    })
+            rows.append({
+                "appid": install.appid,
+                "name": install.name,
+                "buildid": install.buildid,
+                "engine": engine,
+                "installed_translation": current.translation_id if current else "",
+                "translations": translations,
+            })
+        return rows
 
     @staticmethod
     def _patcher_for(appid: int, game_dir: Path):

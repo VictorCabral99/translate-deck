@@ -63,6 +63,23 @@ V3 (formato intermediário do 4.4) não apareceu em nenhum pack público testado
    só usar quando o jogo ignorar o locale do sistema; entra em `files_touched`
    e é removido no revert.
 
+## Pack inteiro: `godot_pack_replace`
+
+Traduções distribuídas como `.pck` já traduzido (sem `.translation` separado)
+usam o método `godot_pck_replace` (`patch.kind = godot_pack_replace`,
+artefato `pck`):
+
+1. Exige pack-alvo não embutido; pack embutido no `.exe` continua recusado.
+2. Valida o artefato com `read_pack()` antes de qualquer escrita.
+3. Backup byte-exato do `.pck` original, cópia para `<pack>.tdeck-new`,
+   revalidação e `os.replace`.
+4. Manifest guarda hash antes/depois; `uninstall` restaura o original.
+5. Não cria `override.cfg` — o pack já contém o locale.
+
+Fonte do artefato: biblioteca local (sideload) ou catálogo. É o único método
+que aceita pacote de terceiro sem saber o caminho interno da tradução; por
+isso avisa sobre buildid divergente e exige confirmação na inspeção.
+
 ## Ferramenta alternativa: GDRE Tools
 
 O escritor próprio é o padrão: artefatos `godot_translation` e `po` são
@@ -91,6 +108,8 @@ gdre_tools.exe --headless --pck-patch=<Game.pck> --output=<Game.pck.tdeck-new> \
 O método `godot_pck_translations` cobre traduções embarcadas no `.pck`. Jogos
 que leem traduções de uma pasta `i18n/` fora do pack (ex.: Pathway) exigem um
 método de "arquivos soltos" com backup por arquivo, ainda não implementado.
+Quando só existe um `.pck` já traduzido, use `godot_pack_replace` (com backup
+do pack inteiro).
 
 ## Verificação
 
@@ -98,6 +117,7 @@ método de "arquivos soltos" com backup por arquivo, ainda não implementado.
 - `tdeck install ... --apply` grava; `tdeck verify --appid N` reporta
   `installed` / `revalidated` / `missing`.
 - `tdeck uninstall --appid N` restaura o backup; o SHA do `.pck` volta ao
-  original (o E2E `tests/e2e/windows_e2e.py` prova isso a cada execução).
+  original (o E2E `tests/e2e/windows_e2e.py` prova isso a cada execução, nos
+  dois métodos: insert e pack inteiro).
 - Teste de aceitação no Deck: aplicar, abrir o jogo em PT-BR, reverter e rodar
   "verificar integridade" sem download.
