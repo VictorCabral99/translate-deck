@@ -18,7 +18,7 @@ from tdeck_core.engines import PATCHERS  # noqa: E402,F401  (registra patchers)
 from tdeck_core.steam import SteamError, find_install, find_installs  # noqa: E402
 
 INDEX_URL = "https://victorcabral99.github.io/translate-deck-catalog/index.json"
-INDEX_SHA256 = ""  # preencher com o sha256 do indice publicado; vazio = recusa
+INDEX_SHA256 = "7feb8ab4717443ab8ec3256f467fc5511b87bea88119b85d585065309f24787c"
 CACHE_INDEX = "catalog-index.json"
 
 _jobs: dict[str, dict] = {}
